@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>CodeGuard AI</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        header {
+            padding: 24px 40px;
+            border-bottom: 1px solid #334155;
+            background: #111827;
+        }
+
+        header h1 {
+            font-size: 28px;
+        }
+
+        header p {
+            color: #94a3b8;
+            margin-top: 6px;
+        }
+
+        main {
+            width: min(1200px, 92%);
+            margin: 35px auto;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 18px;
+            margin-bottom: 35px;
+        }
+
+        .stat-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 22px;
+        }
+
+        .stat-card h3 {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            font-size: 30px;
+            font-weight: bold;
+        }
+
+        .section-title {
+            font-size: 21px;
+            margin-bottom: 16px;
+        }
+
+        .review-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 22px;
+            margin-bottom: 18px;
+        }
+
+        .review-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 12px;
+        }
+
+        .repository {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .meta {
+            color: #94a3b8;
+            margin-top: 5px;
+            font-size: 14px;
+        }
+
+        .score {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .findings {
+            margin-top: 18px;
+        }
+
+        .finding {
+            background: #0f172a;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 12px;
+            border: 1px solid #334155;
+        }
+
+        .finding-title {
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .finding-meta {
+            color: #94a3b8;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .finding p {
+            line-height: 1.5;
+            margin-top: 7px;
+        }
+
+        .critical {
+            color: #ef4444;
+        }
+
+        .high {
+            color: #f97316;
+        }
+
+        .medium {
+            color: #eab308;
+        }
+
+        .low {
+            color: #3b82f6;
+        }
+
+        .info {
+            color: #94a3b8;
+        }
+
+        .empty {
+            color: #94a3b8;
+            padding: 30px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>🛡️ CodeGuard AI</h1>
+    <p>AI-powered pull request review dashboard</p>
+</header>
+
+<main>
+
+    <div class="stats">
+
+        <div class="stat-card">
+            <h3>Total Reviews</h3>
+            <div class="value" id="totalReviews">0</div>
+        </div>
+
+        <div class="stat-card">
+            <h3>Average Score</h3>
+            <div class="value" id="averageScore">0</div>
+        </div>
+
+        <div class="stat-card">
+            <h3>Total Findings</h3>
+            <div class="value" id="totalFindings">0</div>
+        </div>
+
+        <div class="stat-card">
+            <h3>High / Critical</h3>
+            <div class="value" id="highFindings">0</div>
+        </div>
+
+    </div>
+
+    <h2 class="section-title">
+        Recent Reviews
+    </h2>
+
+    <div id="reviews">
+
+        <div class="empty">
+            Loading reviews...
+        </div>
+
+    </div>
+
+</main>
+
+<script>
+
+    async function loadReviews() {
+
+        const response =
+            await fetch("/api/reviews");
+
+        const reviews =
+            await response.json();
+
+        renderStats(reviews);
+
+        renderReviews(reviews);
+    }
+
+    function renderStats(reviews) {
+
+        const totalReviews =
+            reviews.length;
+
+        let totalScore = 0;
+
+        let totalFindings = 0;
+
+        let highFindings = 0;
+
+        reviews.forEach(review => {
+
+            totalScore += review.score;
+
+            totalFindings +=
+                review.findings.length;
+
+            review.findings.forEach(finding => {
+
+                if (
+                    finding.severity === "HIGH" ||
+                    finding.severity === "CRITICAL"
+                ) {
+
+                    highFindings++;
+                }
+            });
+        });
+
+        const averageScore =
+            totalReviews === 0
+                ? 0
+                : (
+                    totalScore /
+                    totalReviews
+                ).toFixed(1);
+
+        document.getElementById(
+            "totalReviews"
+        ).textContent =
+            totalReviews;
+
+        document.getElementById(
+            "averageScore"
+        ).textContent =
+            averageScore + "/10";
+
+        document.getElementById(
+            "totalFindings"
+        ).textContent =
+            totalFindings;
+
+        document.getElementById(
+            "highFindings"
+        ).textContent =
+            highFindings;
+    }
+
+    function renderReviews(reviews) {
+
+        const container =
+            document.getElementById(
+                "reviews"
+            );
+
+        if (reviews.length === 0) {
+
+            container.innerHTML =
+                `
+                <div class="empty">
+                    No reviews yet.
+                </div>
+                `;
+
+            return;
+        }
+
+        container.innerHTML = "";
+
+        reviews.forEach(review => {
+
+            const card =
+                document.createElement(
+                    "div"
+                );
+
+            card.className =
+                "review-card";
+
+            let findingsHtml = "";
+
+            review.findings.forEach(
+                finding => {
+
+                    const severityClass =
+                        finding.severity
+                            .toLowerCase();
+
+                    findingsHtml += `
+                        <div class="finding">
+
+                            <div class="
+                                finding-title
+                                ${severityClass}
+                            ">
+                                ${finding.severity}
+                                —
+                                ${finding.title}
+                            </div>
+
+                            <div class="
+                                finding-meta
+                            ">
+                                ${finding.category}
+                                •
+                                Line
+                                ${finding.lineNumber}
+                            </div>
+
+                            <p>
+                                ${finding.explanation}
+                            </p>
+
+                            <p>
+                                <strong>
+                                    Suggested fix:
+                                </strong>
+
+                                ${finding.suggestion}
+                            </p>
+
+                        </div>
+                    `;
+                }
+            );
+
+            const date =
+                new Date(
+                    review.createdAt
+                ).toLocaleString();
+
+            card.innerHTML = `
+
+                <div class="review-header">
+
+                    <div>
+
+                        <div class="repository">
+                            ${review.repositoryOwner}
+                            /
+                            ${review.repositoryName}
+                        </div>
+
+                        <div class="meta">
+                            PR #${review.pullNumber}
+                            •
+                            ${date}
+                        </div>
+
+                    </div>
+
+                    <div class="score">
+                        ${review.score}/10
+                    </div>
+
+                </div>
+
+                <div class="meta">
+                    Commit:
+                    ${review.commitSha.substring(
+                        0,
+                        10
+                    )}
+                </div>
+
+                <div class="findings">
+
+                    ${findingsHtml || `
+                        <div class="finding">
+                            ✅ No findings
+                        </div>
+                    `}
+
+                </div>
+            `;
+
+            container.appendChild(card);
+        });
+    }
+
+    loadReviews();
+
+</script>
+
+</body>
+</html>
