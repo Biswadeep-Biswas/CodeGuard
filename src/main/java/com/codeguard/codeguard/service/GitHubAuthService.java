@@ -21,45 +21,64 @@ public class GitHubAuthService {
 
     private final String appId;
     private final String privateKeyPath;
+    private final String privateKeyValue;
 
     public GitHubAuthService(
             @Value("${github.app.id}") String appId,
-            @Value("${github.private-key-path}") String privateKeyPath) {
+            @Value("${github.private-key-path:}") String privateKeyPath,
+            @Value("${github.private-key:}") String privateKeyValue) {
 
         this.appId = appId;
         this.privateKeyPath = privateKeyPath;
+        this.privateKeyValue = privateKeyValue;
     }
 
     public String createInstallationToken(long installationId) {
 
         try {
+
             String jwt = createAppJwt();
 
             RestClient client = RestClient.builder()
                     .baseUrl("https://api.github.com")
-                    .defaultHeader("Accept", "application/vnd.github+json")
-                    .defaultHeader("Authorization", "Bearer " + jwt)
+                    .defaultHeader(
+                            "Accept",
+                            "application/vnd.github+json"
+                    )
+                    .defaultHeader(
+                            "Authorization",
+                            "Bearer " + jwt
+                    )
                     .build();
 
             JsonNode response = client
                     .post()
-                    .uri("/app/installations/{id}/access_tokens", installationId)
+                    .uri(
+                            "/app/installations/{id}/access_tokens",
+                            installationId
+                    )
                     .retrieve()
                     .body(JsonNode.class);
 
             if (response == null) {
-                throw new RuntimeException("Empty installation token response");
+                throw new RuntimeException(
+                        "Empty installation token response"
+                );
             }
 
-            String token = response.path("token").asText();
+            String token =
+                    response.path("token").asText();
 
             if (token.isBlank()) {
-                throw new RuntimeException("GitHub installation token missing");
+                throw new RuntimeException(
+                        "GitHub installation token missing"
+                );
             }
 
             return token;
 
         } catch (Exception e) {
+
             throw new RuntimeException(
                     "Failed to create GitHub installation token",
                     e
@@ -69,110 +88,215 @@ public class GitHubAuthService {
 
     private String createAppJwt() throws Exception {
 
-        RSAPrivateKey privateKey = readPrivateKey();
+        RSAPrivateKey privateKey =
+                readPrivateKey();
 
         Algorithm algorithm =
-                Algorithm.RSA256(null, privateKey);
+                Algorithm.RSA256(
+                        null,
+                        privateKey
+                );
 
-        Instant now = Instant.now();
+        Instant now =
+                Instant.now();
 
         return JWT.create()
                 .withIssuer(appId)
-                .withIssuedAt(Date.from(now.minusSeconds(60)))
-                .withExpiresAt(Date.from(now.plusSeconds(9 * 60)))
+                .withIssuedAt(
+                        Date.from(
+                                now.minusSeconds(60)
+                        )
+                )
+                .withExpiresAt(
+                        Date.from(
+                                now.plusSeconds(9 * 60)
+                        )
+                )
                 .sign(algorithm);
     }
 
-    private RSAPrivateKey readPrivateKey() throws Exception {
+    private RSAPrivateKey readPrivateKey()
+            throws Exception {
 
-        String pem = Files.readString(
-                Path.of(privateKeyPath)
-        );
+        String pem;
 
-        if (pem.contains("BEGIN RSA PRIVATE KEY")) {
-            pem = convertPkcs1ToPkcs8(pem);
+        if (
+                privateKeyValue != null &&
+                !privateKeyValue.isBlank()
+        ) {
+
+            pem = privateKeyValue
+                    .replace("\\n", "\n");
+
+        } else {
+
+            if (
+                    privateKeyPath == null ||
+                    privateKeyPath.isBlank()
+            ) {
+
+                throw new RuntimeException(
+                        "GitHub private key is not configured"
+                );
+            }
+
+            pem = Files.readString(
+                    Path.of(privateKeyPath)
+            );
+        }
+
+        if (
+                pem.contains(
+                        "BEGIN RSA PRIVATE KEY"
+                )
+        ) {
+
+            pem =
+                    convertPkcs1ToPkcs8(pem);
         }
 
         pem = pem
-                .replace("-----BEGIN PRIVATE KEY-----", "")
-                .replace("-----END PRIVATE KEY-----", "")
-                .replaceAll("\\s", "");
+                .replace(
+                        "-----BEGIN PRIVATE KEY-----",
+                        ""
+                )
+                .replace(
+                        "-----END PRIVATE KEY-----",
+                        ""
+                )
+                .replaceAll(
+                        "\\s",
+                        ""
+                );
 
         byte[] decoded =
-                Base64.getDecoder().decode(pem);
+                Base64.getDecoder()
+                        .decode(pem);
 
         PKCS8EncodedKeySpec keySpec =
-                new PKCS8EncodedKeySpec(decoded);
+                new PKCS8EncodedKeySpec(
+                        decoded
+                );
 
         KeyFactory keyFactory =
-                KeyFactory.getInstance("RSA");
+                KeyFactory.getInstance(
+                        "RSA"
+                );
 
         return (RSAPrivateKey)
-                keyFactory.generatePrivate(keySpec);
+                keyFactory.generatePrivate(
+                        keySpec
+                );
     }
 
-    private String convertPkcs1ToPkcs8(String pkcs1Pem)
+    private String convertPkcs1ToPkcs8(
+            String pkcs1Pem)
             throws Exception {
 
-        String cleaned = pkcs1Pem
-                .replace("-----BEGIN RSA PRIVATE KEY-----", "")
-                .replace("-----END RSA PRIVATE KEY-----", "")
-                .replaceAll("\\s", "");
+        String cleaned =
+                pkcs1Pem
+                        .replace(
+                                "-----BEGIN RSA PRIVATE KEY-----",
+                                ""
+                        )
+                        .replace(
+                                "-----END RSA PRIVATE KEY-----",
+                                ""
+                        )
+                        .replaceAll(
+                                "\\s",
+                                ""
+                        );
 
         byte[] pkcs1Bytes =
-                Base64.getDecoder().decode(cleaned);
+                Base64.getDecoder()
+                        .decode(cleaned);
 
         byte[] pkcs8Bytes =
-                wrapPkcs1InPkcs8(pkcs1Bytes);
+                wrapPkcs1InPkcs8(
+                        pkcs1Bytes
+                );
 
         return "-----BEGIN PRIVATE KEY-----\n"
-                + Base64.getMimeEncoder(64, new byte[]{'\n'})
-                .encodeToString(pkcs8Bytes)
+                + Base64.getMimeEncoder(
+                        64,
+                        new byte[]{'\n'}
+                ).encodeToString(
+                        pkcs8Bytes
+                )
                 + "\n-----END PRIVATE KEY-----";
     }
 
-    private byte[] wrapPkcs1InPkcs8(byte[] pkcs1Bytes) {
+    private byte[] wrapPkcs1InPkcs8(
+            byte[] pkcs1Bytes) {
 
-        byte[] rsaAlgorithmIdentifier = new byte[]{
-                0x30, 0x0D,
-                0x06, 0x09,
-                0x2A, (byte) 0x86, 0x48, (byte) 0x86,
-                (byte) 0xF7, 0x0D, 0x01, 0x01, 0x01,
-                0x05, 0x00
-        };
+        byte[] rsaAlgorithmIdentifier =
+                new byte[]{
+                        0x30, 0x0D,
+                        0x06, 0x09,
+                        0x2A,
+                        (byte) 0x86,
+                        0x48,
+                        (byte) 0x86,
+                        (byte) 0xF7,
+                        0x0D,
+                        0x01,
+                        0x01,
+                        0x01,
+                        0x05,
+                        0x00
+                };
 
         byte[] octetString =
-                encodeDerOctetString(pkcs1Bytes);
+                encodeDerOctetString(
+                        pkcs1Bytes
+                );
 
-        byte[] body = concatenate(
-                new byte[]{0x02, 0x01, 0x00},
-                rsaAlgorithmIdentifier,
-                octetString
-        );
+        byte[] body =
+                concatenate(
+                        new byte[]{
+                                0x02,
+                                0x01,
+                                0x00
+                        },
+                        rsaAlgorithmIdentifier,
+                        octetString
+                );
 
         return encodeDerSequence(body);
     }
 
-    private byte[] encodeDerSequence(byte[] data) {
+    private byte[] encodeDerSequence(
+            byte[] data) {
+
         return concatenate(
                 new byte[]{0x30},
-                encodeLength(data.length),
+                encodeLength(
+                        data.length
+                ),
                 data
         );
     }
 
-    private byte[] encodeDerOctetString(byte[] data) {
+    private byte[] encodeDerOctetString(
+            byte[] data) {
+
         return concatenate(
                 new byte[]{0x04},
-                encodeLength(data.length),
+                encodeLength(
+                        data.length
+                ),
                 data
         );
     }
 
-    private byte[] encodeLength(int length) {
+    private byte[] encodeLength(
+            int length) {
 
         if (length < 128) {
-            return new byte[]{(byte) length};
+            return new byte[]{
+                    (byte) length
+            };
         }
 
         int temp = length;
@@ -184,14 +308,26 @@ public class GitHubAuthService {
         }
 
         byte[] result =
-                new byte[bytesNeeded + 1];
+                new byte[
+                        bytesNeeded + 1
+                ];
 
         result[0] =
-                (byte) (0x80 | bytesNeeded);
+                (byte) (
+                        0x80 |
+                        bytesNeeded
+                );
 
-        for (int i = bytesNeeded; i > 0; i--) {
+        for (
+                int i = bytesNeeded;
+                i > 0;
+                i--
+        ) {
+
             result[i] =
-                    (byte) (length & 0xFF);
+                    (byte) (
+                            length & 0xFF
+                    );
 
             length >>= 8;
         }
@@ -199,7 +335,8 @@ public class GitHubAuthService {
         return result;
     }
 
-    private byte[] concatenate(byte[]... arrays) {
+    private byte[] concatenate(
+            byte[]... arrays) {
 
         int totalLength = 0;
 
