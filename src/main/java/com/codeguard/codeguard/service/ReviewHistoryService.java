@@ -22,10 +22,8 @@ public class ReviewHistoryService {
     }
 
     /*
-     * Only a SUCCESS review counts as
-     * already fully reviewed.
-     *
-     * FAILED reviews may be retried later.
+     * Only SUCCESS means this exact commit
+     * has already been completely reviewed.
      */
     public boolean alreadyReviewed(
             String owner,
@@ -44,8 +42,8 @@ public class ReviewHistoryService {
     }
 
     /*
-     * Create a PROCESSING database row
-     * before Gemini starts.
+     * Create a PROCESSING review before
+     * contacting Gemini.
      */
     @Transactional
     public ReviewEntity startReview(
@@ -64,8 +62,7 @@ public class ReviewHistoryService {
                 .map(existing -> {
 
                     /*
-                     * If the previous attempt failed,
-                     * reuse the same row.
+                     * A failed review can be retried.
                      */
                     if (existing.getStatus()
                             == ReviewStatus.FAILED) {
@@ -96,8 +93,8 @@ public class ReviewHistoryService {
     }
 
     /*
-     * Called only when Gemini + GitHub
-     * review processing succeeds.
+     * Store successful findings and mark
+     * the review SUCCESS.
      */
     @Transactional
     public void markSuccess(
@@ -116,20 +113,18 @@ public class ReviewHistoryService {
 
         review.clearFindings();
 
-        for (Finding finding :
-                response.getFindings()) {
+        if (response.getFindings() != null) {
 
-            ReviewFindingEntity entity =
-                    new ReviewFindingEntity(
-                            finding.getSeverity(),
-                            finding.getCategory(),
-                            finding.getTitle(),
-                            finding.getExplanation(),
-                            finding.getSuggestion(),
-                            finding.getLine()
-                    );
+            for (Finding finding :
+                    response.getFindings()) {
 
-            review.addFinding(entity);
+                ReviewFindingEntity entity =
+                        createFindingEntity(
+                                finding
+                        );
+
+                review.addFinding(entity);
+            }
         }
 
         review.markSuccess(
@@ -140,8 +135,8 @@ public class ReviewHistoryService {
     }
 
     /*
-     * Called if Gemini/GitHub processing
-     * fails.
+     * Store the failure reason and mark
+     * the review FAILED.
      */
     @Transactional
     public void markFailed(
@@ -168,6 +163,10 @@ public class ReviewHistoryService {
                     "Unknown review failure";
         }
 
+        /*
+         * Keep safely below the database
+         * column's 4000-character limit.
+         */
         if (message.length() > 3900) {
 
             message =
@@ -177,17 +176,21 @@ public class ReviewHistoryService {
                     );
         }
 
-        review.markFailed(message);
+        review.markFailed(
+                message
+        );
 
-        reviewRepository.save(review);
+        reviewRepository.save(
+                review
+        );
     }
 
     /*
-     * Keep this temporarily so existing
-     * GitHubService code still compiles.
+     * Kept for compatibility with any
+     * existing callers.
      *
-     * We will remove/use the new lifecycle
-     * methods in the next step.
+     * New GitHub reviews should normally
+     * use startReview() + markSuccess().
      */
     @Transactional
     public void saveReview(
@@ -216,26 +219,44 @@ public class ReviewHistoryService {
 
         review.clearFindings();
 
-        for (Finding finding :
-                response.getFindings()) {
+        if (response.getFindings() != null) {
 
-            ReviewFindingEntity entity =
-                    new ReviewFindingEntity(
-                            finding.getSeverity(),
-                            finding.getCategory(),
-                            finding.getTitle(),
-                            finding.getExplanation(),
-                            finding.getSuggestion(),
-                            finding.getLine()
-                    );
+            for (Finding finding :
+                    response.getFindings()) {
 
-            review.addFinding(entity);
+                ReviewFindingEntity entity =
+                        createFindingEntity(
+                                finding
+                        );
+
+                review.addFinding(entity);
+            }
         }
 
         review.markSuccess(
                 response.getScore()
         );
 
-        reviewRepository.save(review);
+        reviewRepository.save(
+                review
+        );
+    }
+
+    /*
+     * Convert the API/model Finding into
+     * the MySQL/JPA entity.
+     */
+    private ReviewFindingEntity createFindingEntity(
+            Finding finding) {
+
+        return new ReviewFindingEntity(
+                finding.getSeverity(),
+                finding.getCategory(),
+                finding.getTitle(),
+                finding.getExplanation(),
+                finding.getSuggestion(),
+                finding.getFilePath(),
+                finding.getLine()
+        );
     }
 }

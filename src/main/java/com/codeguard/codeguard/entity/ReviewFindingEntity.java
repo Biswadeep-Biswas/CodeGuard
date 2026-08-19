@@ -16,6 +16,9 @@ public class ReviewFindingEntity {
 
     private String title;
 
+    @Column(name = "file_path")
+    private String filePath;
+
     @Column(length = 4000)
     private String explanation;
 
@@ -31,6 +34,10 @@ public class ReviewFindingEntity {
     public ReviewFindingEntity() {
     }
 
+    /*
+     * Old constructor kept temporarily
+     * for backward compatibility.
+     */
     public ReviewFindingEntity(
             String severity,
             String category,
@@ -39,11 +46,35 @@ public class ReviewFindingEntity {
             String suggestion,
             int lineNumber) {
 
+        this(
+                severity,
+                category,
+                title,
+                explanation,
+                suggestion,
+                null,
+                lineNumber
+        );
+    }
+
+    /*
+     * New constructor including file path.
+     */
+    public ReviewFindingEntity(
+            String severity,
+            String category,
+            String title,
+            String explanation,
+            String suggestion,
+            String filePath,
+            int lineNumber) {
+
         this.severity = severity;
         this.category = category;
         this.title = title;
         this.explanation = explanation;
         this.suggestion = suggestion;
+        this.filePath = filePath;
         this.lineNumber = lineNumber;
     }
 
@@ -67,6 +98,10 @@ public class ReviewFindingEntity {
 
     public String getTitle() {
         return title;
+    }
+
+    public String getFilePath() {
+        return filePath;
     }
 
     public String getExplanation() {

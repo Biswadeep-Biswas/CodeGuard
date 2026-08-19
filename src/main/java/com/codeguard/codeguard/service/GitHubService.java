@@ -9,9 +9,16 @@ import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class GitHubService {
+
+    private static final Pattern HUNK_HEADER =
+            Pattern.compile(
+                    "@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,(\\d+))? @@.*"
+            );
 
     private final GitHubAuthService authService;
     private final ReviewService reviewService;
@@ -34,9 +41,6 @@ public class GitHubService {
             long installationId,
             String commitSha) {
 
-        /*
-         * Don't review the same successful commit twice.
-         */
         if (reviewHistoryService.alreadyReviewed(
                 owner,
                 repository,
@@ -57,10 +61,6 @@ public class GitHubService {
 
         try {
 
-            /*
-             * Create the database record BEFORE
-             * beginning the actual review.
-             */
             reviewEntity =
                     reviewHistoryService.startReview(
                             owner,
@@ -74,9 +74,6 @@ public class GitHubService {
                             + " marked PROCESSING."
             );
 
-            /*
-             * Authenticate as the GitHub App.
-             */
             String token =
                     authService.createInstallationToken(
                             installationId
@@ -97,9 +94,6 @@ public class GitHubService {
                             )
                             .build();
 
-            /*
-             * Fetch changed files from the PR.
-             */
             JsonNode files =
                     client.get()
                             .uri(
@@ -119,10 +113,6 @@ public class GitHubService {
                 );
             }
 
-            /*
-             * Build the source-code input that
-             * will be sent to CodeGuard/Gemini.
-             */
             StringBuilder reviewInput =
                     new StringBuilder();
 
@@ -144,20 +134,23 @@ public class GitHubService {
                     continue;
                 }
 
+                String numberedPatch =
+                        convertPatchToNumberedNewLines(
+                                filename,
+                                patch
+                        );
+
+                if (numberedPatch.isBlank()) {
+                    continue;
+                }
+
                 reviewInput
-                        .append("\n\nFILE: ")
-                        .append(filename)
-                        .append("\n")
-                        .append(patch);
+                        .append("\n\n")
+                        .append(numberedPatch);
             }
 
             if (reviewInput.isEmpty()) {
 
-                /*
-                 * This is not technically a system
-                 * failure. There simply wasn't
-                 * anything useful to review.
-                 */
                 ReviewResponse emptyReview =
                         new ReviewResponse(
                                 10,
@@ -186,25 +179,22 @@ public class GitHubService {
                             + " to CodeGuard review engine..."
             );
 
-            /*
-             * AiReviewService now retries Gemini
-             * automatically for temporary
-             * 429/503 failures.
-             */
+            System.out.println(
+                    "Normalized review input:"
+            );
+
+            System.out.println(
+                    reviewInput
+            );
+
             ReviewResponse review =
                     reviewService.reviewCode(
                             reviewInput.toString()
                     );
 
-            /*
-             * Build the GitHub summary comment.
-             */
             String comment =
                     buildComment(review);
 
-            /*
-             * Post the CodeGuard review to GitHub.
-             */
             client.post()
                     .uri(
                             "/repos/{owner}/{repo}/issues/{pull}/comments",
@@ -226,10 +216,6 @@ public class GitHubService {
                             + pullNumber
             );
 
-            /*
-             * Only mark SUCCESS after the AI
-             * review AND GitHub comment succeeded.
-             */
             reviewHistoryService.markSuccess(
                     reviewEntity.getId(),
                     review
@@ -248,11 +234,6 @@ public class GitHubService {
                             + e.getMessage()
             );
 
-            /*
-             * If a PROCESSING database record was
-             * successfully created, convert it to
-             * FAILED.
-             */
             if (reviewEntity != null
                     && reviewEntity.getId() != null) {
 
@@ -280,15 +261,191 @@ public class GitHubService {
                 }
             }
 
-            /*
-             * Re-throw so the webhook background
-             * process still knows something failed.
-             */
             throw new RuntimeException(
                     "Pull request review failed.",
                     e
             );
         }
+    }
+
+    /*
+     * Converts GitHub's unified diff into explicit
+     * new-file line numbers.
+     *
+     * Example:
+     *
+     * FILE: LoginService.java
+     * NEW LINE 5: public void login(...) {
+     * NEW LINE 6:     System.out.println(password);
+     *
+     * Deleted lines are ignored because they do not
+     * exist in the new version of the file.
+     */
+    private String convertPatchToNumberedNewLines(
+            String filename,
+            String patch) {
+
+        StringBuilder output =
+                new StringBuilder();
+
+        output.append(
+                "FILE: "
+        );
+
+        output.append(
+                filename
+        );
+
+        output.append(
+                "\n"
+        );
+
+        String[] lines =
+                patch.split(
+                        "\\R"
+                );
+
+        int newLineNumber = -1;
+
+        boolean insideHunk = false;
+
+        for (String line : lines) {
+
+            Matcher matcher =
+                    HUNK_HEADER.matcher(
+                            line
+                    );
+
+            if (matcher.matches()) {
+
+                newLineNumber =
+                        Integer.parseInt(
+                                matcher.group(1)
+                        );
+
+                insideHunk = true;
+
+                continue;
+            }
+
+            if (!insideHunk) {
+                continue;
+            }
+
+            /*
+             * Ignore metadata marker.
+             */
+            if (line.startsWith(
+                    "\\ No newline at end of file"
+            )) {
+
+                continue;
+            }
+
+            /*
+             * Deleted line.
+             *
+             * It existed only in the old file,
+             * so it does not consume a new-file
+             * line number.
+             */
+            if (line.startsWith("-")) {
+
+                continue;
+            }
+
+            /*
+             * Added line.
+             */
+            if (line.startsWith("+")) {
+
+                output.append(
+                        "NEW LINE "
+                );
+
+                output.append(
+                        newLineNumber
+                );
+
+                output.append(
+                        ": "
+                );
+
+                output.append(
+                        line.substring(1)
+                );
+
+                output.append(
+                        "\n"
+                );
+
+                newLineNumber++;
+
+                continue;
+            }
+
+            /*
+             * Context line.
+             *
+             * Context lines exist in both old
+             * and new versions, so they consume
+             * a new-file line number too.
+             */
+            if (line.startsWith(" ")) {
+
+                output.append(
+                        "NEW LINE "
+                );
+
+                output.append(
+                        newLineNumber
+                );
+
+                output.append(
+                        ": "
+                );
+
+                output.append(
+                        line.substring(1)
+                );
+
+                output.append(
+                        "\n"
+                );
+
+                newLineNumber++;
+
+                continue;
+            }
+
+            /*
+             * Defensive fallback for unusual
+             * patch content.
+             */
+            output.append(
+                    "NEW LINE "
+            );
+
+            output.append(
+                    newLineNumber
+            );
+
+            output.append(
+                    ": "
+            );
+
+            output.append(
+                    line
+            );
+
+            output.append(
+                    "\n"
+            );
+
+            newLineNumber++;
+        }
+
+        return output.toString();
     }
 
     private String getUsefulErrorMessage(
@@ -317,7 +474,9 @@ public class GitHubService {
                                 .getSimpleName()
                 );
 
-                message.append(": ");
+                message.append(
+                        ": "
+                );
 
                 message.append(
                         current.getMessage()
@@ -350,9 +509,17 @@ public class GitHubService {
                 "## 🤖 CodeGuard AI Review\n\n"
         );
 
-        builder.append("**Score: ")
-                .append(review.getScore())
-                .append("/10**\n\n");
+        builder.append(
+                "**Score: "
+        );
+
+        builder.append(
+                review.getScore()
+        );
+
+        builder.append(
+                "/10**\n\n"
+        );
 
         List<Finding> findings =
                 review.getFindings();
@@ -369,23 +536,39 @@ public class GitHubService {
 
         for (Finding finding : findings) {
 
-            builder.append("---\n\n");
+            builder.append(
+                    "---\n\n"
+            );
 
-            builder.append("### ")
-                    .append(
-                            severityEmoji(
-                                    finding.getSeverity()
-                            )
-                    )
-                    .append(" ")
-                    .append(
+            builder.append(
+                    "### "
+            );
+
+            builder.append(
+                    severityEmoji(
                             finding.getSeverity()
                     )
-                    .append(" — ")
-                    .append(
-                            finding.getTitle()
-                    )
-                    .append("\n\n");
+            );
+
+            builder.append(
+                    " "
+            );
+
+            builder.append(
+                    finding.getSeverity()
+            );
+
+            builder.append(
+                    " — "
+            );
+
+            builder.append(
+                    finding.getTitle()
+            );
+
+            builder.append(
+                    "\n\n"
+            );
 
             builder.append(
                     "**Category:** "
@@ -395,7 +578,25 @@ public class GitHubService {
                     finding.getCategory()
             );
 
-            builder.append("\n\n");
+            builder.append(
+                    "\n\n"
+            );
+
+            if (finding.getFilePath() != null
+                    && !finding.getFilePath().isBlank()) {
+
+                builder.append(
+                        "**File:** `"
+                );
+
+                builder.append(
+                        finding.getFilePath()
+                );
+
+                builder.append(
+                        "`\n\n"
+                );
+            }
 
             builder.append(
                     "**Line:** "
@@ -405,13 +606,17 @@ public class GitHubService {
                     finding.getLine()
             );
 
-            builder.append("\n\n");
+            builder.append(
+                    "\n\n"
+            );
 
             builder.append(
                     finding.getExplanation()
             );
 
-            builder.append("\n\n");
+            builder.append(
+                    "\n\n"
+            );
 
             builder.append(
                     "**Suggested fix:** "
@@ -421,7 +626,9 @@ public class GitHubService {
                     finding.getSuggestion()
             );
 
-            builder.append("\n\n");
+            builder.append(
+                    "\n\n"
+            );
         }
 
         return builder.toString();
