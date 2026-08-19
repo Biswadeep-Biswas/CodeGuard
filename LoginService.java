@@ -1,6 +1,4 @@
-// Testing CodeGuard webhook
-/*CodeGuard comment posted successfully to PR #1
-Review saved to MySQL.*/
+// Testing CodeGuard production deployment
 public class LoginService {
 
     public void login(String password) {
@@ -11,6 +9,6 @@ public class LoginService {
     }
 
     private void authenticate(String password) {
-        System.out.println(password);
+        System.out.println("PASSWORD: " + password);
     }
 }
