@@ -7,6 +7,23 @@
     <title>CodeGuard AI</title>
 
     <style>
+        :root {
+            --bg: #08111f;
+            --panel: #111827;
+            --panel-2: #162033;
+            --border: #263244;
+            --text: #e5edf7;
+            --muted: #91a0b5;
+            --success: #22c55e;
+            --failed: #ef4444;
+            --processing: #f59e0b;
+            --critical: #dc2626;
+            --high: #f97316;
+            --medium: #eab308;
+            --low: #3b82f6;
+            --info: #94a3b8;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -14,145 +31,400 @@
         }
 
         body {
-            font-family: Arial, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 30%),
+                var(--bg);
+            color: var(--text);
             min-height: 100vh;
         }
 
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
         header {
-            padding: 24px 40px;
-            border-bottom: 1px solid #334155;
-            background: #111827;
+            border-bottom: 1px solid var(--border);
+            background: rgba(8, 17, 31, 0.94);
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
 
-        header h1 {
-            font-size: 28px;
+        .header-inner {
+            width: min(1280px, 92%);
+            margin: 0 auto;
+            padding: 22px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
         }
 
-        header p {
-            color: #94a3b8;
-            margin-top: 6px;
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .logo {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+            display: grid;
+            place-items: center;
+            font-size: 22px;
+            box-shadow: 0 10px 30px rgba(37, 99, 235, 0.18);
+        }
+
+        .brand h1 {
+            font-size: 23px;
+        }
+
+        .brand p {
+            color: var(--muted);
+            margin-top: 3px;
+            font-size: 13px;
+        }
+
+        .header-badge {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--muted);
+            border-radius: 999px;
+            padding: 8px 12px;
+            font-size: 12px;
         }
 
         main {
-            width: min(1200px, 92%);
-            margin: 35px auto;
+            width: min(1280px, 92%);
+            margin: 34px auto 60px;
+        }
+
+        .hero {
+            margin-bottom: 28px;
+        }
+
+        .hero h2 {
+            font-size: clamp(28px, 5vw, 44px);
+            letter-spacing: -1px;
+        }
+
+        .hero p {
+            color: var(--muted);
+            margin-top: 10px;
+            max-width: 700px;
+            line-height: 1.6;
         }
 
         .stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 18px;
-            margin-bottom: 35px;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-bottom: 34px;
         }
 
         .stat-card {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 22px;
+            background: linear-gradient(180deg, rgba(22, 32, 51, 0.95), rgba(17, 24, 39, 0.95));
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
         }
 
-        .stat-card h3 {
-            color: #94a3b8;
-            font-size: 14px;
+        .stat-label {
+            color: var(--muted);
+            font-size: 13px;
             margin-bottom: 10px;
         }
 
-        .stat-card .value {
-            font-size: 30px;
-            font-weight: bold;
+        .stat-value {
+            font-size: 31px;
+            font-weight: 800;
+            letter-spacing: -1px;
         }
 
-        .section-title {
-            font-size: 21px;
-            margin-bottom: 16px;
+        .stat-sub {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 12px;
         }
 
-        .review-card {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 22px;
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 18px;
             margin-bottom: 18px;
         }
 
-        .review-header {
+        .toolbar h3 {
+            font-size: 20px;
+        }
+
+        .refresh-btn {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--text);
+            border-radius: 10px;
+            padding: 9px 13px;
+            cursor: pointer;
+        }
+
+        .refresh-btn:hover {
+            background: var(--panel-2);
+        }
+
+        .review-card {
+            background: linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(13, 22, 37, 0.98));
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 22px;
+            margin-bottom: 18px;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.16);
+        }
+
+        .review-top {
             display: flex;
             justify-content: space-between;
             gap: 20px;
-            margin-bottom: 12px;
+            align-items: flex-start;
         }
 
-        .repository {
+        .repo-title {
             font-size: 18px;
-            font-weight: bold;
+            font-weight: 750;
+        }
+
+        .repo-title a:hover {
+            text-decoration: underline;
         }
 
         .meta {
-            color: #94a3b8;
-            margin-top: 5px;
-            font-size: 14px;
+            color: var(--muted);
+            margin-top: 7px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .status-wrap {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .status-badge {
+            padding: 7px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 800;
+            border: 1px solid transparent;
+        }
+
+        .status-success {
+            color: #86efac;
+            background: rgba(34, 197, 94, 0.1);
+            border-color: rgba(34, 197, 94, 0.25);
+        }
+
+        .status-failed {
+            color: #fca5a5;
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.25);
+        }
+
+        .status-processing {
+            color: #fcd34d;
+            background: rgba(245, 158, 11, 0.1);
+            border-color: rgba(245, 158, 11, 0.25);
+        }
+
+        .status-unknown {
+            color: #cbd5e1;
+            background: rgba(148, 163, 184, 0.1);
+            border-color: rgba(148, 163, 184, 0.25);
         }
 
         .score {
-            font-size: 24px;
-            font-weight: bold;
+            font-size: 26px;
+            font-weight: 850;
+        }
+
+        .metrics {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .metric {
+            background: #0b1423;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 13px;
+        }
+
+        .metric-label {
+            color: var(--muted);
+            font-size: 11px;
+            margin-bottom: 6px;
+        }
+
+        .metric-value {
+            font-weight: 800;
+            font-size: 18px;
         }
 
         .findings {
-            margin-top: 18px;
+            margin-top: 20px;
         }
 
         .finding {
-            background: #0f172a;
-            padding: 16px;
-            border-radius: 8px;
-            margin-top: 12px;
-            border: 1px solid #334155;
+            background: #0b1423;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-top: 11px;
+            overflow: hidden;
         }
+
+        .finding-toggle {
+            width: 100%;
+            border: 0;
+            background: transparent;
+            color: inherit;
+            text-align: left;
+            cursor: pointer;
+            padding: 15px 16px;
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .finding-heading {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 9px;
+            align-items: center;
+        }
+
+        .severity {
+            font-size: 11px;
+            font-weight: 850;
+            border-radius: 999px;
+            padding: 5px 8px;
+            border: 1px solid currentColor;
+        }
+
+        .severity-critical { color: var(--critical); }
+        .severity-high { color: var(--high); }
+        .severity-medium { color: var(--medium); }
+        .severity-low { color: var(--low); }
+        .severity-info { color: var(--info); }
 
         .finding-title {
-            font-weight: bold;
-            margin-bottom: 8px;
+            font-weight: 700;
         }
 
-        .finding-meta {
-            color: #94a3b8;
+        .finding-location {
+            color: var(--muted);
+            font-size: 12px;
+            margin-top: 6px;
+        }
+
+        .chevron {
+            color: var(--muted);
+            transition: transform 0.2s ease;
+        }
+
+        .finding.open .chevron {
+            transform: rotate(180deg);
+        }
+
+        .finding-body {
+            display: none;
+            padding: 0 16px 16px;
+            color: #cbd5e1;
+            line-height: 1.65;
+            font-size: 14px;
+        }
+
+        .finding.open .finding-body {
+            display: block;
+        }
+
+        .suggestion {
+            margin-top: 11px;
+            padding: 12px;
+            border-radius: 10px;
+            background: rgba(37, 99, 235, 0.07);
+            border: 1px solid rgba(59, 130, 246, 0.18);
+        }
+
+        .error-box {
+            margin-top: 18px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            background: rgba(239, 68, 68, 0.07);
+            border-radius: 12px;
+            padding: 14px;
+            color: #fecaca;
             font-size: 13px;
-            margin-bottom: 8px;
-        }
-
-        .finding p {
             line-height: 1.5;
-            margin-top: 7px;
         }
 
-        .critical {
-            color: #ef4444;
-        }
-
-        .high {
-            color: #f97316;
-        }
-
-        .medium {
-            color: #eab308;
-        }
-
-        .low {
-            color: #3b82f6;
-        }
-
-        .info {
-            color: #94a3b8;
+        .no-findings {
+            margin-top: 18px;
+            border: 1px solid rgba(34, 197, 94, 0.22);
+            background: rgba(34, 197, 94, 0.06);
+            color: #bbf7d0;
+            border-radius: 12px;
+            padding: 14px;
         }
 
         .empty {
-            color: #94a3b8;
-            padding: 30px;
+            color: var(--muted);
             text-align: center;
+            padding: 50px 20px;
+            border: 1px dashed var(--border);
+            border-radius: 16px;
+        }
+
+        .loading {
+            opacity: 0.6;
+        }
+
+        @media (max-width: 920px) {
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .metrics {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 620px) {
+            .header-inner,
+            .review-top,
+            .toolbar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+            .metrics {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .status-wrap {
+                width: 100%;
+                justify-content: space-between;
+            }
         }
     </style>
 </head>
@@ -160,63 +432,127 @@
 <body>
 
 <header>
-    <h1>🛡️ CodeGuard AI</h1>
-    <p>AI-powered pull request review dashboard</p>
+    <div class="header-inner">
+        <div class="brand">
+            <div class="logo">🛡️</div>
+
+            <div>
+                <h1>CodeGuard AI</h1>
+                <p>Automated GitHub pull request security & quality review</p>
+            </div>
+        </div>
+
+        <div class="header-badge">
+            Spring Boot · Gemini · GitHub Apps
+        </div>
+    </div>
 </header>
 
 <main>
 
-    <div class="stats">
+    <section class="hero">
+        <h2>Review intelligence, at a glance.</h2>
+        <p>
+            Track CodeGuard review history, severity distribution, execution status,
+            security findings and exact source locations from one dashboard.
+        </p>
+    </section>
+
+    <section class="stats">
 
         <div class="stat-card">
-            <h3>Total Reviews</h3>
-            <div class="value" id="totalReviews">0</div>
+            <div class="stat-label">Total Reviews</div>
+            <div class="stat-value" id="totalReviews">0</div>
+            <div class="stat-sub">Latest 20 stored reviews</div>
         </div>
 
         <div class="stat-card">
-            <h3>Average Score</h3>
-            <div class="value" id="averageScore">0</div>
+            <div class="stat-label">Successful Reviews</div>
+            <div class="stat-value" id="successfulReviews">0</div>
+            <div class="stat-sub">Review execution completed</div>
         </div>
 
         <div class="stat-card">
-            <h3>Total Findings</h3>
-            <div class="value" id="totalFindings">0</div>
+            <div class="stat-label">High / Critical Findings</div>
+            <div class="stat-value" id="blockingFindings">0</div>
+            <div class="stat-sub">Potential blocking issues</div>
         </div>
 
         <div class="stat-card">
-            <h3>High / Critical</h3>
-            <div class="value" id="highFindings">0</div>
+            <div class="stat-label">Average Score</div>
+            <div class="stat-value" id="averageScore">0/10</div>
+            <div class="stat-sub">Across completed reviews</div>
         </div>
 
+    </section>
+
+    <div class="toolbar">
+        <h3>Recent Reviews</h3>
+
+        <button
+                class="refresh-btn"
+                id="refreshButton"
+                onclick="loadReviews()">
+            ↻ Refresh
+        </button>
     </div>
 
-    <h2 class="section-title">
-        Recent Reviews
-    </h2>
-
-    <div id="reviews">
-
+    <section id="reviews">
         <div class="empty">
             Loading reviews...
         </div>
-
-    </div>
+    </section>
 
 </main>
 
 <script>
 
+    const reviewsContainer =
+        document.getElementById("reviews");
+
+    const refreshButton =
+        document.getElementById("refreshButton");
+
     async function loadReviews() {
 
-        const response =
-            await fetch("/api/reviews");
+        try {
 
-        const reviews =
-            await response.json();
+            refreshButton.disabled = true;
+            refreshButton.textContent = "Loading...";
 
-        renderStats(reviews);
+            reviewsContainer.classList.add("loading");
 
-        renderReviews(reviews);
+            const response =
+                await fetch("/api/reviews");
+
+            if (!response.ok) {
+                throw new Error(
+                    "API returned HTTP " + response.status
+                );
+            }
+
+            const reviews =
+                await response.json();
+
+            renderStats(reviews);
+            renderReviews(reviews);
+
+        } catch (error) {
+
+            reviewsContainer.innerHTML = `
+                <div class="empty">
+                    Could not load review history.<br><br>
+                    ${escapeHtml(error.message)}
+                </div>
+            `;
+
+        } finally {
+
+            reviewsContainer.classList.remove("loading");
+
+            refreshButton.disabled = false;
+            refreshButton.textContent = "↻ Refresh";
+        }
     }
 
     function renderStats(reviews) {
@@ -224,37 +560,50 @@
         const totalReviews =
             reviews.length;
 
+        const successful =
+            reviews.filter(
+                review =>
+                    review.status === "SUCCESS"
+            ).length;
+
         let totalScore = 0;
-
-        let totalFindings = 0;
-
-        let highFindings = 0;
+        let scoredReviews = 0;
+        let blockingFindings = 0;
 
         reviews.forEach(review => {
 
-            totalScore += review.score;
+            if (
+                review.status === "SUCCESS" &&
+                typeof review.score === "number"
+            ) {
 
-            totalFindings +=
-                review.findings.length;
+                totalScore += review.score;
+                scoredReviews++;
+            }
 
-            review.findings.forEach(finding => {
+            const findings =
+                Array.isArray(review.findings)
+                    ? review.findings
+                    : [];
+
+            findings.forEach(finding => {
 
                 if (
                     finding.severity === "HIGH" ||
                     finding.severity === "CRITICAL"
                 ) {
 
-                    highFindings++;
+                    blockingFindings++;
                 }
             });
         });
 
         const averageScore =
-            totalReviews === 0
+            scoredReviews === 0
                 ? 0
                 : (
                     totalScore /
-                    totalReviews
+                    scoredReviews
                 ).toFixed(1);
 
         document.getElementById(
@@ -263,151 +612,367 @@
             totalReviews;
 
         document.getElementById(
+            "successfulReviews"
+        ).textContent =
+            successful;
+
+        document.getElementById(
+            "blockingFindings"
+        ).textContent =
+            blockingFindings;
+
+        document.getElementById(
             "averageScore"
         ).textContent =
             averageScore + "/10";
-
-        document.getElementById(
-            "totalFindings"
-        ).textContent =
-            totalFindings;
-
-        document.getElementById(
-            "highFindings"
-        ).textContent =
-            highFindings;
     }
 
     function renderReviews(reviews) {
 
-        const container =
-            document.getElementById(
-                "reviews"
-            );
+        if (!reviews.length) {
 
-        if (reviews.length === 0) {
-
-            container.innerHTML =
-                `
+            reviewsContainer.innerHTML = `
                 <div class="empty">
-                    No reviews yet.
+                    No CodeGuard reviews have been stored yet.
                 </div>
-                `;
+            `;
 
             return;
         }
 
-        container.innerHTML = "";
+        reviewsContainer.innerHTML =
+            reviews
+                .map(
+                    review =>
+                        buildReviewCard(review)
+                )
+                .join("");
+    }
 
-        reviews.forEach(review => {
+    function buildReviewCard(review) {
 
-            const card =
-                document.createElement(
-                    "div"
-                );
+        const findings =
+            Array.isArray(review.findings)
+                ? review.findings
+                : [];
 
-            card.className =
-                "review-card";
+        const counts =
+            severityCounts(findings);
 
-            let findingsHtml = "";
+        const repositoryUrl =
+            `https://github.com/${encodeURIComponent(
+                review.repositoryOwner
+            )}/${encodeURIComponent(
+                review.repositoryName
+            )}`;
 
-            review.findings.forEach(
-                finding => {
+        const pullRequestUrl =
+            `${repositoryUrl}/pull/${review.pullNumber}`;
 
-                    const severityClass =
-                        finding.severity
-                            .toLowerCase();
-
-                    findingsHtml += `
-                        <div class="finding">
-
-                            <div class="
-                                finding-title
-                                ${severityClass}
-                            ">
-                                ${finding.severity}
-                                —
-                                ${finding.title}
-                            </div>
-
-                            <div class="
-                                finding-meta
-                            ">
-                                ${finding.category}
-                                •
-                                Line
-                                ${finding.lineNumber}
-                            </div>
-
-                            <p>
-                                ${finding.explanation}
-                            </p>
-
-                            <p>
-                                <strong>
-                                    Suggested fix:
-                                </strong>
-
-                                ${finding.suggestion}
-                            </p>
-
-                        </div>
-                    `;
-                }
-            );
-
-            const date =
-                new Date(
+        const date =
+            review.createdAt
+                ? new Date(
                     review.createdAt
-                ).toLocaleString();
+                ).toLocaleString()
+                : "Unknown";
 
-            card.innerHTML = `
+        const completed =
+            review.completedAt
+                ? new Date(
+                    review.completedAt
+                ).toLocaleString()
+                : null;
 
-                <div class="review-header">
+        const commit =
+            review.commitSha
+                ? review.commitSha.substring(0, 10)
+                : "Unknown";
+
+        const status =
+            review.status || "UNKNOWN";
+
+        return `
+            <article class="review-card">
+
+                <div class="review-top">
 
                     <div>
 
-                        <div class="repository">
-                            ${review.repositoryOwner}
-                            /
-                            ${review.repositoryName}
+                        <div class="repo-title">
+                            <a
+                                href="${repositoryUrl}"
+                                target="_blank"
+                                rel="noopener noreferrer">
+                                ${escapeHtml(review.repositoryOwner)}
+                                /
+                                ${escapeHtml(review.repositoryName)}
+                            </a>
                         </div>
 
                         <div class="meta">
-                            PR #${review.pullNumber}
-                            •
-                            ${date}
+                            <a
+                                href="${pullRequestUrl}"
+                                target="_blank"
+                                rel="noopener noreferrer">
+                                Pull Request #${review.pullNumber}
+                            </a>
+
+                            · Commit ${escapeHtml(commit)}
+                            · Started ${escapeHtml(date)}
+                            ${
+                                completed
+                                    ? " · Completed " +
+                                      escapeHtml(completed)
+                                    : ""
+                            }
                         </div>
 
                     </div>
 
-                    <div class="score">
-                        ${review.score}/10
+                    <div class="status-wrap">
+
+                        <span class="
+                            status-badge
+                            ${statusClass(status)}
+                        ">
+                            ${escapeHtml(status)}
+                        </span>
+
+                        <div class="score">
+                            ${review.score ?? 0}/10
+                        </div>
+
                     </div>
 
                 </div>
 
-                <div class="meta">
-                    Commit:
-                    ${review.commitSha.substring(
-                        0,
-                        10
-                    )}
+                <div class="metrics">
+
+                    ${metric("Findings", findings.length)}
+                    ${metric("Critical", counts.CRITICAL)}
+                    ${metric("High", counts.HIGH)}
+                    ${metric("Medium", counts.MEDIUM)}
+                    ${metric("Low", counts.LOW)}
+                    ${metric("Info", counts.INFO)}
+
                 </div>
+
+                ${
+                    review.errorMessage
+                        ? `
+                            <div class="error-box">
+                                <strong>Review failure</strong><br>
+                                ${escapeHtml(review.errorMessage)}
+                            </div>
+                        `
+                        : ""
+                }
 
                 <div class="findings">
 
-                    ${findingsHtml || `
-                        <div class="finding">
-                            ✅ No findings
-                        </div>
-                    `}
+                    ${
+                        findings.length
+                            ? findings
+                                .map(
+                                    (finding, index) =>
+                                        buildFinding(
+                                            finding,
+                                            review.id,
+                                            index
+                                        )
+                                )
+                                .join("")
+                            : `
+                                <div class="no-findings">
+                                    ✓ No meaningful findings recorded for this review.
+                                </div>
+                            `
+                    }
 
                 </div>
-            `;
 
-            container.appendChild(card);
+            </article>
+        `;
+    }
+
+    function buildFinding(
+        finding,
+        reviewId,
+        index
+    ) {
+
+        const severity =
+            finding.severity || "INFO";
+
+        const file =
+            finding.filePath ||
+            "Unknown file";
+
+        const line =
+            finding.lineNumber ??
+            finding.line ??
+            "?";
+
+        const findingId =
+            `finding-${reviewId}-${index}`;
+
+        return `
+            <div
+                class="finding"
+                id="${findingId}">
+
+                <button
+                    class="finding-toggle"
+                    onclick="toggleFinding('${findingId}')">
+
+                    <div>
+
+                        <div class="finding-heading">
+
+                            <span class="
+                                severity
+                                severity-${severity.toLowerCase()}
+                            ">
+                                ${escapeHtml(severity)}
+                            </span>
+
+                            <span class="finding-title">
+                                ${escapeHtml(finding.title)}
+                            </span>
+
+                        </div>
+
+                        <div class="finding-location">
+                            ${escapeHtml(finding.category || "Uncategorized")}
+                            ·
+                            ${escapeHtml(file)}
+                            :
+                            ${escapeHtml(String(line))}
+                        </div>
+
+                    </div>
+
+                    <span class="chevron">
+                        ▼
+                    </span>
+
+                </button>
+
+                <div class="finding-body">
+
+                    <div>
+                        ${escapeHtml(
+                            finding.explanation || ""
+                        )}
+                    </div>
+
+                    ${
+                        finding.suggestion
+                            ? `
+                                <div class="suggestion">
+                                    <strong>Suggested fix</strong><br>
+                                    ${escapeHtml(
+                                        finding.suggestion
+                                    )}
+                                </div>
+                            `
+                            : ""
+                    }
+
+                </div>
+
+            </div>
+        `;
+    }
+
+    function metric(
+        label,
+        value
+    ) {
+
+        return `
+            <div class="metric">
+                <div class="metric-label">
+                    ${label}
+                </div>
+
+                <div class="metric-value">
+                    ${value}
+                </div>
+            </div>
+        `;
+    }
+
+    function severityCounts(findings) {
+
+        const counts = {
+            CRITICAL: 0,
+            HIGH: 0,
+            MEDIUM: 0,
+            LOW: 0,
+            INFO: 0
+        };
+
+        findings.forEach(finding => {
+
+            const severity =
+                (
+                    finding.severity ||
+                    "INFO"
+                ).toUpperCase();
+
+            if (
+                Object.prototype.hasOwnProperty.call(
+                    counts,
+                    severity
+                )
+            ) {
+
+                counts[severity]++;
+
+            } else {
+
+                counts.INFO++;
+            }
         });
+
+        return counts;
+    }
+
+    function statusClass(status) {
+
+        switch (status) {
+
+            case "SUCCESS":
+                return "status-success";
+
+            case "FAILED":
+                return "status-failed";
+
+            case "PROCESSING":
+                return "status-processing";
+
+            default:
+                return "status-unknown";
+        }
+    }
+
+    function toggleFinding(id) {
+
+        const finding =
+            document.getElementById(id);
+
+        finding.classList.toggle("open");
+    }
+
+    function escapeHtml(value) {
+
+        return String(value ?? "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
     }
 
     loadReviews();
