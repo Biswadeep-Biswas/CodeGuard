@@ -1,10 +1,12 @@
 package com.codeguard.codeguard.service;
 
+import com.codeguard.codeguard.model.Finding;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -77,21 +79,28 @@ public class GitHubCheckService {
             String repository,
             Long checkRunId,
             int score,
-            int findingCount) {
+            List<Finding> findings) {
+
+        String conclusion =
+                determineConclusion(
+                        findings
+                );
 
         Map<String, Object> output =
                 new LinkedHashMap<>();
 
         output.put(
                 "title",
-                "CodeGuard review completed"
+                buildTitle(
+                        conclusion
+                )
         );
 
         output.put(
                 "summary",
-                buildSuccessSummary(
+                buildSummary(
                         score,
-                        findingCount
+                        findings
                 )
         );
 
@@ -105,9 +114,7 @@ public class GitHubCheckService {
 
         body.put(
                 "conclusion",
-                determineConclusion(
-                        findingCount
-                )
+                conclusion
         );
 
         body.put(
@@ -124,7 +131,9 @@ public class GitHubCheckService {
         );
 
         System.out.println(
-                "CodeGuard check marked complete."
+                "CodeGuard check marked "
+                        + conclusion.toUpperCase()
+                        + "."
         );
     }
 
@@ -177,7 +186,7 @@ public class GitHubCheckService {
         );
 
         System.out.println(
-                "CodeGuard check marked FAILED."
+                "CodeGuard check marked FAILURE."
         );
     }
 
@@ -200,30 +209,83 @@ public class GitHubCheckService {
                 .toBodilessEntity();
     }
 
+    /*
+     * Decide whether CodeGuard should
+     * pass, warn, or fail the PR check.
+     */
     private String determineConclusion(
-            int findingCount) {
+            List<Finding> findings) {
 
-        /*
-         * For now:
-         *
-         * no findings  -> success
-         * findings     -> neutral
-         *
-         * This avoids blocking a PR merely because
-         * CodeGuard found advisory issues.
-         *
-         * Later we can fail only for HIGH/CRITICAL.
-         */
-        if (findingCount == 0) {
+        if (findings == null
+                || findings.isEmpty()) {
+
             return "success";
         }
 
-        return "neutral";
+        boolean hasMedium = false;
+
+        for (Finding finding : findings) {
+
+            String severity =
+                    finding.getSeverity();
+
+            if (severity == null) {
+                continue;
+            }
+
+            switch (
+                    severity.toUpperCase()
+            ) {
+
+                case "CRITICAL":
+                case "HIGH":
+
+                    return "failure";
+
+                case "MEDIUM":
+
+                    hasMedium = true;
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        if (hasMedium) {
+            return "neutral";
+        }
+
+        /*
+         * Only LOW / INFO findings.
+         */
+        return "success";
     }
 
-    private String buildSuccessSummary(
+    private String buildTitle(
+            String conclusion) {
+
+        return switch (conclusion) {
+
+            case "failure" ->
+                    "CodeGuard found blocking issues";
+
+            case "neutral" ->
+                    "CodeGuard found issues to review";
+
+            default ->
+                    "CodeGuard review passed";
+        };
+    }
+
+    private String buildSummary(
             int score,
-            int findingCount) {
+            List<Finding> findings) {
+
+        int findingCount =
+                findings == null
+                        ? 0
+                        : findings.size();
 
         if (findingCount == 0) {
 
@@ -233,7 +295,48 @@ public class GitHubCheckService {
                     Score: %d/10
 
                     No meaningful issues were detected.
-                    """.formatted(score);
+                    """.formatted(
+                    score
+            );
+        }
+
+        int critical = 0;
+        int high = 0;
+        int medium = 0;
+        int low = 0;
+        int info = 0;
+
+        for (Finding finding : findings) {
+
+            if (finding.getSeverity() == null) {
+                continue;
+            }
+
+            switch (
+                    finding.getSeverity()
+                            .toUpperCase()
+            ) {
+
+                case "CRITICAL":
+                    critical++;
+                    break;
+
+                case "HIGH":
+                    high++;
+                    break;
+
+                case "MEDIUM":
+                    medium++;
+                    break;
+
+                case "LOW":
+                    low++;
+                    break;
+
+                default:
+                    info++;
+                    break;
+            }
         }
 
         return """
@@ -241,12 +344,23 @@ public class GitHubCheckService {
 
                 Score: %d/10
 
-                Findings detected: %d
+                Total findings: %d
 
-                See the pull request conversation and inline review comments for details.
+                CRITICAL: %d
+                HIGH: %d
+                MEDIUM: %d
+                LOW: %d
+                INFO: %d
+
+                See the inline review comments for details.
                 """.formatted(
                 score,
-                findingCount
+                findingCount,
+                critical,
+                high,
+                medium,
+                low,
+                info
         );
     }
 

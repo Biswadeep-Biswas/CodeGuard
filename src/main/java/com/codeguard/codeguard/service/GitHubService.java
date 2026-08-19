@@ -182,7 +182,7 @@ public class GitHubService {
                         repository,
                         checkRunId,
                         10,
-                        0
+                        List.of()
                 );
 
                 System.out.println(
@@ -253,18 +253,13 @@ public class GitHubService {
                     review
             );
 
-            int findingCount =
-                    review.getFindings() == null
-                            ? 0
-                            : review.getFindings().size();
-
             githubCheckService.markSuccess(
                     githubClient,
                     owner,
                     repository,
                     checkRunId,
                     review.getScore(),
-                    findingCount
+                    review.getFindings()
             );
 
             System.out.println(
@@ -730,6 +725,7 @@ public class GitHubService {
                     && !current.getMessage().isBlank()) {
 
                 if (!message.isEmpty()) {
+
                     message.append(
                             " -> "
                     );
