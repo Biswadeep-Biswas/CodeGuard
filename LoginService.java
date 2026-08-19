@@ -1,4 +1,4 @@
-// Testing CodeGuard production deployment
+// Testing CodeGuard lifecycle status
 public class LoginService {
 
     public void login(String password) {
