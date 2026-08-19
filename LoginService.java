@@ -1,4 +1,4 @@
-// Testing CodeGuard lifecycle status
+// Testing CodeGuard lifecycle status 2
 public class LoginService {
 
     public void login(String password) {
