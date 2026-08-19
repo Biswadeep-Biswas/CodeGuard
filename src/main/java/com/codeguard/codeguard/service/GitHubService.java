@@ -10,32 +10,28 @@ import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Service
 public class GitHubService {
-
-    private static final Pattern HUNK_HEADER =
-            Pattern.compile(
-                    "@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,(\\d+))? @@.*"
-            );
 
     private final GitHubAuthService authService;
     private final ReviewService reviewService;
     private final ReviewHistoryService reviewHistoryService;
     private final GitHubCheckService githubCheckService;
+    private final GitHubDiffParser githubDiffParser;
 
     public GitHubService(
             GitHubAuthService authService,
             ReviewService reviewService,
             ReviewHistoryService reviewHistoryService,
-            GitHubCheckService githubCheckService) {
+            GitHubCheckService githubCheckService,
+            GitHubDiffParser githubDiffParser) {
 
         this.authService = authService;
         this.reviewService = reviewService;
         this.reviewHistoryService = reviewHistoryService;
         this.githubCheckService = githubCheckService;
+        this.githubDiffParser = githubDiffParser;
     }
 
     public void reviewPullRequest(
@@ -87,9 +83,7 @@ public class GitHubService {
 
             githubClient =
                     RestClient.builder()
-                            .baseUrl(
-                                    "https://api.github.com"
-                            )
+                            .baseUrl("https://api.github.com")
                             .defaultHeader(
                                     "Authorization",
                                     "Bearer " + token
@@ -133,14 +127,12 @@ public class GitHubService {
             for (JsonNode file : files) {
 
                 String filename =
-                        file.path(
-                                "filename"
-                        ).asText();
+                        file.path("filename")
+                                .asText();
 
                 String patch =
-                        file.path(
-                                "patch"
-                        ).asText();
+                        file.path("patch")
+                                .asText();
 
                 if (patch == null
                         || patch.isBlank()) {
@@ -149,10 +141,11 @@ public class GitHubService {
                 }
 
                 String numberedPatch =
-                        convertPatchToNumberedNewLines(
-                                filename,
-                                patch
-                        );
+                        githubDiffParser
+                                .convertToNumberedNewLines(
+                                        filename,
+                                        patch
+                                );
 
                 if (numberedPatch.isBlank()) {
                     continue;
@@ -580,131 +573,6 @@ public class GitHubService {
         }
 
         return builder.toString();
-    }
-
-    private String convertPatchToNumberedNewLines(
-            String filename,
-            String patch) {
-
-        StringBuilder output =
-                new StringBuilder();
-
-        output.append(
-                "FILE: "
-        );
-
-        output.append(
-                filename
-        );
-
-        output.append(
-                "\n"
-        );
-
-        String[] lines =
-                patch.split(
-                        "\\R"
-                );
-
-        int newLineNumber = -1;
-        boolean insideHunk = false;
-
-        for (String line : lines) {
-
-            Matcher matcher =
-                    HUNK_HEADER.matcher(
-                            line
-                    );
-
-            if (matcher.matches()) {
-
-                newLineNumber =
-                        Integer.parseInt(
-                                matcher.group(1)
-                        );
-
-                insideHunk = true;
-
-                continue;
-            }
-
-            if (!insideHunk) {
-                continue;
-            }
-
-            if (line.startsWith(
-                    "\\ No newline at end of file"
-            )) {
-
-                continue;
-            }
-
-            if (line.startsWith("-")) {
-                continue;
-            }
-
-            if (line.startsWith("+")) {
-
-                appendNumberedLine(
-                        output,
-                        newLineNumber,
-                        line.substring(1)
-                );
-
-                newLineNumber++;
-
-                continue;
-            }
-
-            if (line.startsWith(" ")) {
-
-                appendNumberedLine(
-                        output,
-                        newLineNumber,
-                        line.substring(1)
-                );
-
-                newLineNumber++;
-
-                continue;
-            }
-
-            appendNumberedLine(
-                    output,
-                    newLineNumber,
-                    line
-            );
-
-            newLineNumber++;
-        }
-
-        return output.toString();
-    }
-
-    private void appendNumberedLine(
-            StringBuilder output,
-            int lineNumber,
-            String source) {
-
-        output.append(
-                "NEW LINE "
-        );
-
-        output.append(
-                lineNumber
-        );
-
-        output.append(
-                ": "
-        );
-
-        output.append(
-                source
-        );
-
-        output.append(
-                "\n"
-        );
     }
 
     private String getUsefulErrorMessage(
