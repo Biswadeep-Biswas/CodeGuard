@@ -24,15 +24,18 @@ public class GitHubService {
     private final GitHubAuthService authService;
     private final ReviewService reviewService;
     private final ReviewHistoryService reviewHistoryService;
+    private final GitHubCheckService githubCheckService;
 
     public GitHubService(
             GitHubAuthService authService,
             ReviewService reviewService,
-            ReviewHistoryService reviewHistoryService) {
+            ReviewHistoryService reviewHistoryService,
+            GitHubCheckService githubCheckService) {
 
         this.authService = authService;
         this.reviewService = reviewService;
         this.reviewHistoryService = reviewHistoryService;
+        this.githubCheckService = githubCheckService;
     }
 
     public void reviewPullRequest(
@@ -59,6 +62,8 @@ public class GitHubService {
         }
 
         ReviewEntity reviewEntity = null;
+        RestClient githubClient = null;
+        Long checkRunId = null;
 
         try {
 
@@ -80,7 +85,7 @@ public class GitHubService {
                             installationId
                     );
 
-            RestClient client =
+            githubClient =
                     RestClient.builder()
                             .baseUrl(
                                     "https://api.github.com"
@@ -95,8 +100,16 @@ public class GitHubService {
                             )
                             .build();
 
+            checkRunId =
+                    githubCheckService.createCheckRun(
+                            githubClient,
+                            owner,
+                            repository,
+                            commitSha
+                    );
+
             JsonNode files =
-                    client.get()
+                    githubClient.get()
                             .uri(
                                     "/repos/{owner}/{repo}/pulls/{pull}/files",
                                     owner,
@@ -163,6 +176,15 @@ public class GitHubService {
                         emptyReview
                 );
 
+                githubCheckService.markSuccess(
+                        githubClient,
+                        owner,
+                        repository,
+                        checkRunId,
+                        10,
+                        0
+                );
+
                 System.out.println(
                         "No reviewable code changes."
                 );
@@ -189,16 +211,9 @@ public class GitHubService {
                             reviewInput.toString()
                     );
 
-            /*
-             * Post inline comments first.
-             *
-             * If GitHub rejects a particular line,
-             * we log it and continue instead of
-             * failing the whole CodeGuard review.
-             */
             int inlineCommentsPosted =
                     postInlineComments(
-                            client,
+                            githubClient,
                             owner,
                             repository,
                             pullNumber,
@@ -206,17 +221,13 @@ public class GitHubService {
                             review
                     );
 
-            /*
-             * Always post one overall summary
-             * comment to the PR conversation too.
-             */
             String summaryComment =
                     buildSummaryComment(
                             review,
                             inlineCommentsPosted
                     );
 
-            client.post()
+            githubClient.post()
                     .uri(
                             "/repos/{owner}/{repo}/issues/{pull}/comments",
                             owner,
@@ -242,6 +253,20 @@ public class GitHubService {
                     review
             );
 
+            int findingCount =
+                    review.getFindings() == null
+                            ? 0
+                            : review.getFindings().size();
+
+            githubCheckService.markSuccess(
+                    githubClient,
+                    owner,
+                    repository,
+                    checkRunId,
+                    review.getScore(),
+                    findingCount
+            );
+
             System.out.println(
                     "Review saved to MySQL and marked SUCCESS."
             );
@@ -255,6 +280,11 @@ public class GitHubService {
                             + e.getMessage()
             );
 
+            String usefulError =
+                    getUsefulErrorMessage(
+                            e
+                    );
+
             if (reviewEntity != null
                     && reviewEntity.getId() != null) {
 
@@ -262,7 +292,7 @@ public class GitHubService {
 
                     reviewHistoryService.markFailed(
                             reviewEntity.getId(),
-                            getUsefulErrorMessage(e)
+                            usefulError
                     );
 
                     System.err.println(
@@ -277,8 +307,28 @@ public class GitHubService {
                             "Could not mark review FAILED: "
                                     + databaseException.getMessage()
                     );
+                }
+            }
 
-                    databaseException.printStackTrace();
+            if (githubClient != null
+                    && checkRunId != null) {
+
+                try {
+
+                    githubCheckService.markFailure(
+                            githubClient,
+                            owner,
+                            repository,
+                            checkRunId,
+                            usefulError
+                    );
+
+                } catch (Exception checkException) {
+
+                    System.err.println(
+                            "Could not update GitHub check: "
+                                    + checkException.getMessage()
+                    );
                 }
             }
 
@@ -313,28 +363,12 @@ public class GitHubService {
             if (finding.getFilePath() == null
                     || finding.getFilePath().isBlank()) {
 
-                System.err.println(
-                        "Skipping inline comment because filePath is missing: "
-                                + finding.getTitle()
-                );
-
                 continue;
             }
 
             if (finding.getLine() <= 0) {
-
-                System.err.println(
-                        "Skipping inline comment because line is invalid: "
-                                + finding.getTitle()
-                );
-
                 continue;
             }
-
-            String body =
-                    buildInlineComment(
-                            finding
-                    );
 
             try {
 
@@ -348,17 +382,15 @@ public class GitHubService {
                         .body(
                                 Map.of(
                                         "body",
-                                        body,
-
+                                        buildInlineComment(
+                                                finding
+                                        ),
                                         "commit_id",
                                         commitSha,
-
                                         "path",
                                         finding.getFilePath(),
-
                                         "line",
                                         finding.getLine(),
-
                                         "side",
                                         "RIGHT"
                                 )
@@ -377,14 +409,6 @@ public class GitHubService {
 
             } catch (HttpClientErrorException e) {
 
-                /*
-                 * GitHub can reject a line if it is
-                 * not commentable in the current diff.
-                 *
-                 * Do NOT fail the entire review.
-                 * The summary comment will still contain
-                 * this finding.
-                 */
                 System.err.println(
                         "Inline comment failed for "
                                 + finding.getFilePath()
@@ -417,68 +441,22 @@ public class GitHubService {
     private String buildInlineComment(
             Finding finding) {
 
-        StringBuilder builder =
-                new StringBuilder();
-
-        builder.append(
-                severityEmoji(
-                        finding.getSeverity()
-                )
-        );
-
-        builder.append(
-                " **"
-        );
-
-        builder.append(
+        return severityEmoji(
                 finding.getSeverity()
-        );
-
-        builder.append(
-                " — "
-        );
-
-        builder.append(
-                finding.getTitle()
-        );
-
-        builder.append(
-                "**\n\n"
-        );
-
-        builder.append(
-                finding.getExplanation()
-        );
-
-        builder.append(
-                "\n\n"
-        );
-
-        builder.append(
-                "**Suggested fix:** "
-        );
-
-        builder.append(
-                finding.getSuggestion()
-        );
-
-        builder.append(
-                "\n\n"
-        );
-
-        builder.append(
-                "_Category: "
-        );
-
-        builder.append(
-                finding.getCategory()
-        );
-
-        builder.append(
-                "_"
-        );
-
-        return builder.toString();
+        )
+                + " **"
+                + finding.getSeverity()
+                + " — "
+                + finding.getTitle()
+                + "**\n\n"
+                + finding.getExplanation()
+                + "\n\n"
+                + "**Suggested fix:** "
+                + finding.getSuggestion()
+                + "\n\n"
+                + "_Category: "
+                + finding.getCategory()
+                + "_";
     }
 
     private String buildSummaryComment(
@@ -606,14 +584,6 @@ public class GitHubService {
             );
         }
 
-        builder.append(
-                "\n"
-        );
-
-        builder.append(
-                "_Detailed findings are posted inline where GitHub allows it._"
-        );
-
         return builder.toString();
     }
 
@@ -642,7 +612,6 @@ public class GitHubService {
                 );
 
         int newLineNumber = -1;
-
         boolean insideHunk = false;
 
         for (String line : lines) {
@@ -676,30 +645,15 @@ public class GitHubService {
             }
 
             if (line.startsWith("-")) {
-
                 continue;
             }
 
             if (line.startsWith("+")) {
 
-                output.append(
-                        "NEW LINE "
-                );
-
-                output.append(
-                        newLineNumber
-                );
-
-                output.append(
-                        ": "
-                );
-
-                output.append(
+                appendNumberedLine(
+                        output,
+                        newLineNumber,
                         line.substring(1)
-                );
-
-                output.append(
-                        "\n"
                 );
 
                 newLineNumber++;
@@ -709,24 +663,10 @@ public class GitHubService {
 
             if (line.startsWith(" ")) {
 
-                output.append(
-                        "NEW LINE "
-                );
-
-                output.append(
-                        newLineNumber
-                );
-
-                output.append(
-                        ": "
-                );
-
-                output.append(
+                appendNumberedLine(
+                        output,
+                        newLineNumber,
                         line.substring(1)
-                );
-
-                output.append(
-                        "\n"
                 );
 
                 newLineNumber++;
@@ -734,30 +674,42 @@ public class GitHubService {
                 continue;
             }
 
-            output.append(
-                    "NEW LINE "
-            );
-
-            output.append(
-                    newLineNumber
-            );
-
-            output.append(
-                    ": "
-            );
-
-            output.append(
+            appendNumberedLine(
+                    output,
+                    newLineNumber,
                     line
-            );
-
-            output.append(
-                    "\n"
             );
 
             newLineNumber++;
         }
 
         return output.toString();
+    }
+
+    private void appendNumberedLine(
+            StringBuilder output,
+            int lineNumber,
+            String source) {
+
+        output.append(
+                "NEW LINE "
+        );
+
+        output.append(
+                lineNumber
+        );
+
+        output.append(
+                ": "
+        );
+
+        output.append(
+                source
+        );
+
+        output.append(
+                "\n"
+        );
     }
 
     private String getUsefulErrorMessage(
@@ -778,7 +730,9 @@ public class GitHubService {
                     && !current.getMessage().isBlank()) {
 
                 if (!message.isEmpty()) {
-                    message.append(" -> ");
+                    message.append(
+                            " -> "
+                    );
                 }
 
                 message.append(
