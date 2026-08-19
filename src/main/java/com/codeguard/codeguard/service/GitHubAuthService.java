@@ -36,7 +36,6 @@ public class GitHubAuthService {
     public String createInstallationToken(long installationId) {
 
         try {
-
             String jwt = createAppJwt();
 
             RestClient client = RestClient.builder()
@@ -86,7 +85,8 @@ public class GitHubAuthService {
         }
     }
 
-    private String createAppJwt() throws Exception {
+    private String createAppJwt()
+            throws Exception {
 
         RSAPrivateKey privateKey =
                 readPrivateKey();
@@ -126,7 +126,8 @@ public class GitHubAuthService {
         ) {
 
             pem = privateKeyValue
-                    .replace("\\n", "\n");
+                    .replace("\\n", "\n")
+                    .trim();
 
         } else {
 
@@ -271,9 +272,7 @@ public class GitHubAuthService {
 
         return concatenate(
                 new byte[]{0x30},
-                encodeLength(
-                        data.length
-                ),
+                encodeLength(data.length),
                 data
         );
     }
@@ -283,9 +282,7 @@ public class GitHubAuthService {
 
         return concatenate(
                 new byte[]{0x04},
-                encodeLength(
-                        data.length
-                ),
+                encodeLength(data.length),
                 data
         );
     }
