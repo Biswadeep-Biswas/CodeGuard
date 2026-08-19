@@ -1,5 +1,6 @@
 package com.codeguard.codeguard.service;
 
+import com.codeguard.codeguard.entity.ReviewEntity;
 import com.codeguard.codeguard.model.Finding;
 import com.codeguard.codeguard.model.ReviewResponse;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,9 @@ public class GitHubService {
             long installationId,
             String commitSha) {
 
+        /*
+         * Don't review the same successful commit twice.
+         */
         if (reviewHistoryService.alreadyReviewed(
                 owner,
                 repository,
@@ -49,119 +53,291 @@ public class GitHubService {
             return;
         }
 
-        String token =
-                authService.createInstallationToken(
-                        installationId
-                );
+        ReviewEntity reviewEntity = null;
 
-        RestClient client = RestClient.builder()
-                .baseUrl("https://api.github.com")
-                .defaultHeader(
-                        "Authorization",
-                        "Bearer " + token
-                )
-                .defaultHeader(
-                        "Accept",
-                        "application/vnd.github+json"
-                )
-                .build();
+        try {
 
-        JsonNode files = client
-                .get()
-                .uri(
-                        "/repos/{owner}/{repo}/pulls/{pull}/files",
-                        owner,
-                        repository,
-                        pullNumber
-                )
-                .retrieve()
-                .body(JsonNode.class);
-
-        if (files == null || !files.isArray()) {
-
-            System.err.println(
-                    "GitHub returned no PR files."
-            );
-
-            return;
-        }
-
-        StringBuilder reviewInput =
-                new StringBuilder();
-
-        for (JsonNode file : files) {
-
-            String filename =
-                    file.path("filename").asText();
-
-            String patch =
-                    file.path("patch").asText();
-
-            if (patch == null || patch.isBlank()) {
-                continue;
-            }
-
-            reviewInput
-                    .append("\n\nFILE: ")
-                    .append(filename)
-                    .append("\n")
-                    .append(patch);
-        }
-
-        if (reviewInput.isEmpty()) {
+            /*
+             * Create the database record BEFORE
+             * beginning the actual review.
+             */
+            reviewEntity =
+                    reviewHistoryService.startReview(
+                            owner,
+                            repository,
+                            pullNumber,
+                            commitSha
+                    );
 
             System.out.println(
-                    "No reviewable code changes."
+                    "Review #" + reviewEntity.getId()
+                            + " marked PROCESSING."
             );
 
-            return;
-        }
+            /*
+             * Authenticate as the GitHub App.
+             */
+            String token =
+                    authService.createInstallationToken(
+                            installationId
+                    );
 
-        System.out.println(
-                "Sending PR #" + pullNumber
-                        + " to CodeGuard review engine..."
-        );
+            RestClient client =
+                    RestClient.builder()
+                            .baseUrl(
+                                    "https://api.github.com"
+                            )
+                            .defaultHeader(
+                                    "Authorization",
+                                    "Bearer " + token
+                            )
+                            .defaultHeader(
+                                    "Accept",
+                                    "application/vnd.github+json"
+                            )
+                            .build();
 
-        ReviewResponse review =
-                reviewService.reviewCode(
-                        reviewInput.toString()
+            /*
+             * Fetch changed files from the PR.
+             */
+            JsonNode files =
+                    client.get()
+                            .uri(
+                                    "/repos/{owner}/{repo}/pulls/{pull}/files",
+                                    owner,
+                                    repository,
+                                    pullNumber
+                            )
+                            .retrieve()
+                            .body(JsonNode.class);
+
+            if (files == null
+                    || !files.isArray()) {
+
+                throw new RuntimeException(
+                        "GitHub returned no PR files."
+                );
+            }
+
+            /*
+             * Build the source-code input that
+             * will be sent to CodeGuard/Gemini.
+             */
+            StringBuilder reviewInput =
+                    new StringBuilder();
+
+            for (JsonNode file : files) {
+
+                String filename =
+                        file.path(
+                                "filename"
+                        ).asText();
+
+                String patch =
+                        file.path(
+                                "patch"
+                        ).asText();
+
+                if (patch == null
+                        || patch.isBlank()) {
+
+                    continue;
+                }
+
+                reviewInput
+                        .append("\n\nFILE: ")
+                        .append(filename)
+                        .append("\n")
+                        .append(patch);
+            }
+
+            if (reviewInput.isEmpty()) {
+
+                /*
+                 * This is not technically a system
+                 * failure. There simply wasn't
+                 * anything useful to review.
+                 */
+                ReviewResponse emptyReview =
+                        new ReviewResponse(
+                                10,
+                                List.of()
+                        );
+
+                reviewHistoryService.markSuccess(
+                        reviewEntity.getId(),
+                        emptyReview
                 );
 
-        String comment =
-                buildComment(review);
+                System.out.println(
+                        "No reviewable code changes."
+                );
 
-        client.post()
-                .uri(
-                        "/repos/{owner}/{repo}/issues/{pull}/comments",
-                        owner,
-                        repository,
-                        pullNumber
-                )
-                .body(
-                        Map.of(
-                                "body",
-                                comment
-                        )
-                )
-                .retrieve()
-                .toBodilessEntity();
+                System.out.println(
+                        "Review marked SUCCESS."
+                );
 
-        reviewHistoryService.saveReview(
-                owner,
-                repository,
-                pullNumber,
-                commitSha,
-                review
-        );
+                return;
+            }
 
-        System.out.println(
-                "CodeGuard comment posted successfully to PR #"
-                        + pullNumber
-        );
+            System.out.println(
+                    "Sending PR #"
+                            + pullNumber
+                            + " to CodeGuard review engine..."
+            );
 
-        System.out.println(
-                "Review saved to MySQL."
-        );
+            /*
+             * AiReviewService now retries Gemini
+             * automatically for temporary
+             * 429/503 failures.
+             */
+            ReviewResponse review =
+                    reviewService.reviewCode(
+                            reviewInput.toString()
+                    );
+
+            /*
+             * Build the GitHub summary comment.
+             */
+            String comment =
+                    buildComment(review);
+
+            /*
+             * Post the CodeGuard review to GitHub.
+             */
+            client.post()
+                    .uri(
+                            "/repos/{owner}/{repo}/issues/{pull}/comments",
+                            owner,
+                            repository,
+                            pullNumber
+                    )
+                    .body(
+                            Map.of(
+                                    "body",
+                                    comment
+                            )
+                    )
+                    .retrieve()
+                    .toBodilessEntity();
+
+            System.out.println(
+                    "CodeGuard comment posted successfully to PR #"
+                            + pullNumber
+            );
+
+            /*
+             * Only mark SUCCESS after the AI
+             * review AND GitHub comment succeeded.
+             */
+            reviewHistoryService.markSuccess(
+                    reviewEntity.getId(),
+                    review
+            );
+
+            System.out.println(
+                    "Review saved to MySQL and marked SUCCESS."
+            );
+
+        } catch (Exception e) {
+
+            System.err.println(
+                    "CodeGuard review failed for PR #"
+                            + pullNumber
+                            + ": "
+                            + e.getMessage()
+            );
+
+            /*
+             * If a PROCESSING database record was
+             * successfully created, convert it to
+             * FAILED.
+             */
+            if (reviewEntity != null
+                    && reviewEntity.getId() != null) {
+
+                try {
+
+                    reviewHistoryService.markFailed(
+                            reviewEntity.getId(),
+                            getUsefulErrorMessage(e)
+                    );
+
+                    System.err.println(
+                            "Review #"
+                                    + reviewEntity.getId()
+                                    + " marked FAILED."
+                    );
+
+                } catch (Exception databaseException) {
+
+                    System.err.println(
+                            "Could not mark review FAILED: "
+                                    + databaseException.getMessage()
+                    );
+
+                    databaseException.printStackTrace();
+                }
+            }
+
+            /*
+             * Re-throw so the webhook background
+             * process still knows something failed.
+             */
+            throw new RuntimeException(
+                    "Pull request review failed.",
+                    e
+            );
+        }
+    }
+
+    private String getUsefulErrorMessage(
+            Exception exception) {
+
+        StringBuilder message =
+                new StringBuilder();
+
+        Throwable current =
+                exception;
+
+        int depth = 0;
+
+        while (current != null
+                && depth < 5) {
+
+            if (current.getMessage() != null
+                    && !current.getMessage().isBlank()) {
+
+                if (!message.isEmpty()) {
+                    message.append(" -> ");
+                }
+
+                message.append(
+                        current.getClass()
+                                .getSimpleName()
+                );
+
+                message.append(": ");
+
+                message.append(
+                        current.getMessage()
+                );
+            }
+
+            current =
+                    current.getCause();
+
+            depth++;
+        }
+
+        if (message.isEmpty()) {
+
+            return exception
+                    .getClass()
+                    .getSimpleName();
+        }
+
+        return message.toString();
     }
 
     private String buildComment(
@@ -181,7 +357,8 @@ public class GitHubService {
         List<Finding> findings =
                 review.getFindings();
 
-        if (findings == null || findings.isEmpty()) {
+        if (findings == null
+                || findings.isEmpty()) {
 
             builder.append(
                     "✅ No meaningful issues detected."
@@ -210,17 +387,25 @@ public class GitHubService {
                     )
                     .append("\n\n");
 
-            builder.append("**Category:** ")
-                    .append(
-                            finding.getCategory()
-                    )
-                    .append("\n\n");
+            builder.append(
+                    "**Category:** "
+            );
 
-            builder.append("**Line:** ")
-                    .append(
-                            finding.getLine()
-                    )
-                    .append("\n\n");
+            builder.append(
+                    finding.getCategory()
+            );
+
+            builder.append("\n\n");
+
+            builder.append(
+                    "**Line:** "
+            );
+
+            builder.append(
+                    finding.getLine()
+            );
+
+            builder.append("\n\n");
 
             builder.append(
                     finding.getExplanation()
@@ -250,11 +435,21 @@ public class GitHubService {
         }
 
         return switch (severity) {
-            case "CRITICAL" -> "🔴";
-            case "HIGH" -> "🟠";
-            case "MEDIUM" -> "🟡";
-            case "LOW" -> "🔵";
-            default -> "ℹ️";
+
+            case "CRITICAL" ->
+                    "🔴";
+
+            case "HIGH" ->
+                    "🟠";
+
+            case "MEDIUM" ->
+                    "🟡";
+
+            case "LOW" ->
+                    "🔵";
+
+            default ->
+                    "ℹ️";
         };
     }
 }
