@@ -9,6 +9,6 @@ public class LoginService {
     }
 
     private void authenticate(String password) {
-        System.out.println("PASSWORD: " + password);
+        System.out.println("USER PASSWORD: " + password);
     }
 }
